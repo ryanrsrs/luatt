@@ -1,10 +1,11 @@
+#ifdef ARDUINO_NRF52840_ITSYBITSY
+
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_DotStar.h>
 
 #include "luatt_context.h"
 #include "luatt_funcs_itsybitsy.h"
-
 
 ///////////////////////////////////
 // Dotstar LED (single).
@@ -86,3 +87,5 @@ void luatt_setup_funcs_red_led(lua_State* L, int led_pin, bool active_low) {
     lua_pushcfunction(L, lf_set_red_led);
     lua_setglobal(L, "set_red_led");
 }
+
+#endif
