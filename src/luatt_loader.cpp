@@ -33,7 +33,7 @@ int Luatt_Loader::Buffer_t::add(int ch) {
         return -1;
     }
     if (len >= max_size) {
-        printf("error|%s:%i,input buffer overflow.\n", __FILE__, __LINE__);
+        Serial.printf("error|%s:%i,input buffer overflow.\n", __FILE__, __LINE__);
         overflow = true;
         return -1;
     }
@@ -44,14 +44,14 @@ int Luatt_Loader::Buffer_t::add(int ch) {
         }
         char* new_buf = (char*) realloc(buf, size);
         if (new_buf == 0) {
-            printf("error|%s:%i,realloc(%i) failed.\n", __FILE__, __LINE__, size);
+            Serial.printf("error|%s:%i,realloc(%i) failed.\n", __FILE__, __LINE__, size);
             overflow = true;
             return -1;
         }
         buf = new_buf;
     }
     if (len == size) {
-        printf("error|%s:%i,input buffer overflow2.\n", __FILE__, __LINE__);
+        Serial.printf("error|%s:%i,input buffer overflow2.\n", __FILE__, __LINE__);
         overflow = true;
         return -1;
     }
@@ -93,21 +93,21 @@ void Luatt_Loader::Run_Command() {
     else if (!strcmp(cmd,   "msg")) Command_Msg();
     else {
         // unrecognized command
-        printf("error|%s:%i,bad command,%s\n", __FILE__, __LINE__, cmd);
-        printf("ret|fail\n");
+        Serial.printf("error|%s:%i,bad command,%s\n", __FILE__, __LINE__, cmd);
+        Serial.print("ret|fail\n");
     }
 }
 
 void Luatt_Loader::Command_Reset() {
     Lua_Reset();
-    printf("ret|ok\n");
+    Serial.print("ret|ok\n");
     return;
 }
 
 void Luatt_Loader::Command_Eval() {
     if (Args_n != 3) {
-        printf("error|%s:%i,eval requires 3 args, %i given.\n", __FILE__, __LINE__, Args_n);
-        printf("ret|fail\n");
+        Serial.printf("error|%s:%i,eval requires 3 args, %i given.\n", __FILE__, __LINE__, Args_n);
+        Serial.print("ret|fail\n");
         return;
     }
 
@@ -115,18 +115,18 @@ void Luatt_Loader::Command_Eval() {
     if (r != LUA_OK) {
         // lua error
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
         lua_pop(LUA, 1);
-        printf("ret|fail\n");
+        Serial.print("ret|fail\n");
         return;
     }
 
     r = lua_pcall(LUA, 0, LUA_MULTRET, 0);
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
         lua_pop(LUA, 1);
-        printf("ret|fail\n");
+        Serial.print("ret|fail\n");
         return;
     }
 
@@ -149,31 +149,31 @@ void Luatt_Loader::Command_Eval() {
         }
     }
 
-    printf("ret|ok\n");
+    Serial.print("ret|ok\n");
 }
 
 void Luatt_Loader::Command_Load() {
     if (Args_n != 4) {
-        printf("error|%s:%i,load requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
-        printf("ret|fail\n");
+        Serial.printf("error|%s:%i,load requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
+        Serial.print("ret|fail\n");
         return;
     }
 
     int r = luaL_loadbufferx(LUA, Buffer.buf + Args[3].off, Args[3].len, Buffer.buf + Args[2].off, "t");
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
         lua_pop(LUA, 1);
-        printf("ret|fail\n");
+        Serial.print("ret|fail\n");
         return;
     }
 
     r = lua_pcall(LUA, 0, 1, 0);
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
         lua_pop(LUA, 1);
-        printf("ret|fail\n");
+        Serial.print("ret|fail\n");
         return;
     }
 
@@ -186,13 +186,13 @@ void Luatt_Loader::Command_Load() {
         lua_setglobal(LUA, Buffer.buf + Args[2].off);
     }
 
-    printf("ret|ok\n");
+    Serial.print("ret|ok\n");
 }
 
 void Luatt_Loader::Command_Msg() {
     if (Args_n != 4) {
-        printf("error|%s:%i,msg requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
-        printf("ret|fail\n");
+        Serial.printf("error|%s:%i,msg requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
+        Serial.print("ret|fail\n");
         return;
     }
 
@@ -214,7 +214,7 @@ void Luatt_Loader::Command_Msg() {
     r = lua_pcall(LUA, 2, 1, 0);
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
     }
 
 Exit:
@@ -230,7 +230,7 @@ int Luatt_Loader::Parse_Line()
     int i = 0;
     while (p < Buffer.len) {
         if (i >= LUATT_MAX_ARGS) {
-            printf("error|%s:%i,too many args, limit %i.\n", __FILE__, __LINE__, LUATT_MAX_ARGS);
+            Serial.printf("error|%s:%i,too many args, limit %i.\n", __FILE__, __LINE__, LUATT_MAX_ARGS);
             return -1;
         }
         char* s = Buffer.buf + p;
@@ -252,7 +252,7 @@ int Luatt_Loader::Parse_Line()
             char* end = s + 1;
             unsigned long bytes = strtoul(end, &end, 10);
             if (*end || bytes >= Buffer.max_size) {
-                printf("error|%s:%i,invalid raw byte count '%s'\n", __FILE__, __LINE__, s);
+                Serial.printf("error|%s:%i,invalid raw byte count '%s'\n", __FILE__, __LINE__, s);
                 return -1;
             }
             Raw[Raw_n].arg_i = i;
@@ -301,7 +301,7 @@ void Luatt_Loader::Feed_Char(int ch)
         Raw_read++;
         if (Raw_read == r.bytes + 1) {
             if (ch != '\n') {
-                printf("error|%s:%i,expected newline after raw block.\n", __FILE__, __LINE__);
+                Serial.printf("error|%s:%i,expected newline after raw block.\n", __FILE__, __LINE__);
                 Buffer.overflow = true;
                 return;
             }

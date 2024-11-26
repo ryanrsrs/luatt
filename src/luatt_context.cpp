@@ -46,7 +46,7 @@ int Lua_Loop(uint32_t interrupt_flags) {
     r = lua_pcall(LUA, 1, 1, 0);
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
         lua_pop(LUA, 1);
         return max_sleep;
     }
