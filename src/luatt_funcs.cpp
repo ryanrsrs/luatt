@@ -36,7 +36,14 @@ static int lf_time_rollovers(lua_State *L) {
 
 static int lf_meminfo(lua_State *L) {
     // prints to stdout
+#ifdef ARDUINO_NRF52840_ITSYBITSY
     dbgMemInfo();
+#elif defined(ARDUINO_RASPBERRY_PI_PICO)
+    Serial.printf("Heap used: %i\n", rp2040.getUsedHeap());
+    Serial.printf("Heap free: %i\n", rp2040.getFreeHeap());
+#else
+    Serial.print("Error: dbgMemInfo() not supported.\n");
+#endif
     return 0;
 }
 
