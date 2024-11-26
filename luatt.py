@@ -366,7 +366,7 @@ def process_serial_packet(packet):
     packet = tuple(packet)
     if len(packet) < 2:
         # mostly log text output
-        print_line(repl(packet), "pckt> ", 103)
+        print_line(repr(packet), "pckt> ", 103)
         return
     token = packet[0]
     cmd = packet[1]
