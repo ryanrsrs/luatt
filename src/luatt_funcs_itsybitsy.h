@@ -9,9 +9,9 @@
 struct lua_State;
 
 class Adafruit_DotStar;
-void luatt_setup_funcs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool implicit_show=true);
+void luatt_setfuncs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool implicit_show=true);
 
-void luatt_setup_funcs_red_led(lua_State* L, int led_pin, bool active_low=false);
+void luatt_setfuncs_red_led(lua_State* L, int led_pin, bool active_low=false);
 
 #endif
 

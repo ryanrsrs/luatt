@@ -152,14 +152,8 @@ void Luatt_Loader::Command_Eval() {
     Serial.print("ret|ok\n");
 }
 
-void Luatt_Loader::Command_Load() {
-    if (Args_n != 4) {
-        Serial.printf("error|%s:%i,load requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
-        Serial.print("ret|fail\n");
-        return;
-    }
-
-    int r = luaL_loadbufferx(LUA, Buffer.buf + Args[3].off, Args[3].len, Buffer.buf + Args[2].off, "t");
+void Luatt_Loader::LoadLua(const char* name, const char* lua, size_t lua_len) {
+    int r = luaL_loadbufferx(LUA, lua, lua_len, name, "t");
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
         Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
@@ -182,11 +176,24 @@ void Luatt_Loader::Command_Load() {
         lua_pop(LUA, 1);
     }
     else {
-        // Assign module result to global var.
-        lua_setglobal(LUA, Buffer.buf + Args[2].off);
+        // Assign module result to Luatt.pkgs
+        lua_getglobal(LUA, "Luatt");
+        lua_getfield(LUA, -1, "pkgs");
+        lua_remove(LUA, -2); // Luatt
+        lua_rotate(LUA, -2, 1);
+        lua_setfield(LUA, -2, name);
+        lua_pop(LUA, 1);
     }
-
     Serial.print("ret|ok\n");
+}
+
+void Luatt_Loader::Command_Load() {
+    if (Args_n != 4) {
+        Serial.printf("error|%s:%i,load requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
+        Serial.print("ret|fail\n");
+        return;
+    }
+    LoadLua(Buffer.buf + Args[2].off, Buffer.buf + Args[3].off, Args[3].len);
 }
 
 void Luatt_Loader::Command_Msg() {
@@ -197,13 +204,11 @@ void Luatt_Loader::Command_Msg() {
     }
 
     // Lua function MQ.OnMessage(topic, payload)
-    int r = lua_getglobal(LUA, "MQ");
-    if (r != LUA_TTABLE) goto Exit;
-
-    r = lua_getfield(LUA, -1, "OnMessage");
-    if (r != LUA_TFUNCTION) goto Exit;
-
-    lua_remove(LUA, -2);
+    int r = lua_getfield(LUA, LUA_REGISTRYINDEX, "luatt_on_msg");
+    if (r != LUA_TFUNCTION) {
+        lua_pop(LUA, 1);
+        return;
+    }
 
     // topic
     lua_pushlstring(LUA, Buffer.buf + Args[2].off, Args[2].len);
@@ -211,14 +216,11 @@ void Luatt_Loader::Command_Msg() {
     // payload
     lua_pushlstring(LUA, Buffer.buf + Args[3].off, Args[3].len);
 
-    r = lua_pcall(LUA, 2, 1, 0);
+    r = lua_pcall(LUA, 2, 0, 0);
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
         Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
     }
-
-Exit:
-    lua_pop(LUA, lua_gettop(LUA));
 }
 
 int Luatt_Loader::Parse_Line()

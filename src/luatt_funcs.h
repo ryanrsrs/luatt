@@ -5,6 +5,6 @@
 
 struct lua_State;
 
-void luatt_setup_funcs(lua_State* L);
+void luatt_setfuncs(lua_State* L);
 
 #endif

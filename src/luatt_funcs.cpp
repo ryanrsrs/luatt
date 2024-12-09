@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
+#include <nrfx.h>
 
 #include <malloc.h>
 
@@ -34,6 +35,27 @@ static int lf_time_rollovers(lua_State *L) {
     return 1;
 }
 
+static int lf_time_uptime(lua_State* L) {
+    int ms = millis();
+    uint64_t secs = State_rollovers;
+    secs <<= 32;
+    secs += ms;
+    secs /= 1000;
+    lua_pushinteger(L, (int)secs);
+    return 1;
+}
+
+static int lf_time_delay(lua_State* L) {
+    int ms = luaL_checkinteger(L, 1);
+    delay(ms);
+    return 0;
+}
+
+static int lf_time_yield(lua_State* L) {
+    yield();
+    return 0;
+}
+
 static int lf_meminfo(lua_State *L) {
     // prints to stdout
 #ifdef ARDUINO_NRF52840_ITSYBITSY
@@ -58,23 +80,83 @@ static int lf_set_mux_token(lua_State *L) {
     return 0;
 }
 
-void luatt_setup_funcs(lua_State* L) {
+static int lf_print_hex(struct lua_State* L) {
+    size_t len;
+    const char* data = luaL_checklstring(L, 1, &len);
+    size_t i;
+    for (i = 0; i < len; i++) {
+        if (i == 0) {
+            // pass
+        }
+        else if ((i & 15) == 0) {
+            Serial.print("\n");
+        }
+        else if ((i & 3) == 0) {
+            Serial.print(" ");
+        }
+        Serial.printf("%02x", data[i]);
+    }
+    Serial.print("\n");
+    return 0;
+}
+
+static int lf_set_cb_sched_loop(struct lua_State* L) {
+    if (!lua_isfunction(L, 1)) {
+        return luaL_error(L, "sched_loop callback must be a function");
+    }
+    lua_setfield(L, LUA_REGISTRYINDEX, "luatt_sched_loop");
+    return 0;
+}
+
+static int lf_set_cb_on_msg(struct lua_State* L) {
+    if (!lua_isfunction(L, 1)) {
+        return luaL_error(L, "on_msg callback must be a function");
+    }
+    lua_setfield(L, LUA_REGISTRYINDEX, "luatt_on_msg");
+    return 0;
+}
+
+static int lf_get_device_id(lua_State *L) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%08lx_%08lx", NRF_FICR->DEVICEID[0], NRF_FICR->DEVICEID[1]);
+    lua_pushstring(L, buf);
+    return 1;
+}
+
+void luatt_setfuncs(lua_State* L) {
+    // Luatt root table
+    lua_getfield(L, LUA_REGISTRYINDEX, "luatt_root");
+
+    static const struct luaL_Reg luatt_table[] = {
+        { "set_cb_sched_loop", lf_set_cb_sched_loop },
+        { "set_cb_on_msg",     lf_set_cb_on_msg },
+        { "get_mux_token",  lf_get_mux_token },
+        { "set_mux_token",  lf_set_mux_token },
+        { "get_device_id",  lf_get_device_id },
+        { 0, 0 }
+    };
+    luaL_setfuncs(L, luatt_table, 0);
+
+    // Luatt.time
+    lua_newtable(L);
     static const struct luaL_Reg time_table[] = {
         { "millis",    lf_time_millis },
         { "micros",    lf_time_micros },
         { "rollovers", lf_time_rollovers },
+        { "uptime",    lf_time_uptime },
+        { "delay",     lf_time_delay },
+        { "yield",     lf_time_yield },
         { 0, 0 }
     };
-    lua_newtable(L);
     luaL_setfuncs(L, time_table, 0);
-    lua_setglobal(L, "time");
+    lua_setfield(L, -2, "time");
+
+    lua_pop(L, 1);
+
 
     lua_pushcfunction(L, lf_meminfo);
     lua_setglobal(L, "meminfo");
 
-    lua_pushcfunction(L, lf_get_mux_token);
-    lua_setglobal(L, "get_mux_token");
-
-    lua_pushcfunction(L, lf_set_mux_token);
-    lua_setglobal(L, "set_mux_token");
+    lua_pushcfunction(L, lf_print_hex);
+    lua_setglobal(L, "print_hex");
 }

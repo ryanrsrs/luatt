@@ -55,6 +55,8 @@ public:
     Luatt_Loader(char* static_buf=0, size_t static_buf_size=0);
     ~Luatt_Loader();
 
+    void LoadLua(const char* name, const char* lua, size_t lua_len);
+
     int Loop();
 };
 

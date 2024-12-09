@@ -67,6 +67,7 @@ import readline
 import secrets
 import select
 import shlex
+import signal
 import socket
 import socketserver
 import stat
@@ -287,6 +288,7 @@ def read_packet_line(fd, partial):
     line = [partial]
     while not Quit:
         rd, wr, ex = select.select([fd], [], [fd])
+        if fd in ex: break
         if fd not in rd: continue
         buf = os.read(fd, 4096)
         bd = buf
@@ -368,6 +370,7 @@ def process_serial_packet(packet):
         # mostly log text output
         print_line(repr(packet), "pckt> ", 103)
         return
+    print_line(repr(packet), "pckt> ", 103)
     token = packet[0]
     cmd = packet[1]
 
@@ -386,7 +389,7 @@ def process_serial_packet(packet):
         q = QS.get(token)
         if q is not None:
             q.put(packet)
-        elif token.split('/')[0] == str(os.getppid()):
+        elif token.split('/')[0] in (str(os.getppid()), 'sched'):
             body = '|'.join(packet[1:])
             if Enable_REPL:
                 sys.stdout.write(f"\033[2K\r{body}\n")
@@ -429,14 +432,21 @@ def read_packet(fd, partial, printer):
             fields.append(f)
     return (fields, partial)
 
+MainThread = threading.get_ident()
+
 # Thread to read packets from the serial port or unix socket.
 def read_serial():
+    global Quit, Enable_REPL
     partial = ''
     while not Quit:
         v = read_packet(Conn['fd'], partial, printer_serial)
         if not v:
-            partial = ''
-            continue
+            #partial = ''
+            #continue
+            print("read_serial() quitting")
+            Quit = True
+            signal.pthread_kill(MainThread, signal.SIGHUP)
+            break
 
         packet, partial = v
         process_serial_packet(packet)
@@ -464,11 +474,17 @@ def wait_for_version(q):
     return None
 
 if not Conn['is_socket']:
-    if 0:
+    if 1:
         # only log the primary luatt.py
-        log_name = f"/tmp/luatt.{os.getpid()}.log"
+        log_name = f"luatt.{os.getpid()}.log"
+        log_path = os.path.join("/tmp", log_name)
         # use line buffering
-        LogFile = open(log_name, 'w', buffering=1)
+        LogFile = open(log_path, 'w', buffering=1)
+
+        symlink_path = "/tmp/luatt.log"
+        if os.path.islink(symlink_path):
+            os.unlink(symlink_path)
+        os.symlink(log_name, symlink_path)
 
 if LogFile:
     LogColor = LogFile.isatty()
@@ -636,7 +652,7 @@ def cmd_load(cmd):
             f = open(path, 'r', encoding='utf-8')
             data = f.read(100 * 1024)
         except OSError as err:
-            print(f"Error: !load {err.strerror}")
+            print(f"Error: !load {path} {err.strerror}")
             return
         load_data(name, data)
 
@@ -708,19 +724,20 @@ for arg in sys.argv[2:]:
 
 try:
     if Enable_REPL:
-        while True:
+        while not Quit:
             Force_Update = True
             s = input("lua> ")
             Force_Update = False
             if s and not parse_line(s):
                 break
     else:
-        while True:
+        while not Quit:
             time.sleep(1)
 except (EOFError, KeyboardInterrupt):
     print()
     pass
 finally:
+    print("finally")
     Quit = True
     if Server:
         Server.shutdown()

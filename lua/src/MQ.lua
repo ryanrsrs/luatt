@@ -55,4 +55,6 @@ function MQ.Publish (topic, payload)
     print("pub|" .. topic .. "|" .. payload)
 end
 
+Luatt.set_cb_on_msg(MQ.OnMessage)
+
 return MQ

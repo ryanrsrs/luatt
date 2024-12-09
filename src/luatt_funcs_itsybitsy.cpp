@@ -10,46 +10,57 @@
 ///////////////////////////////////
 // Dotstar LED (single).
 
-static struct {
-    Adafruit_DotStar* dotstar;
-    bool implicit_show;
-} State_dotstar;
+static Adafruit_DotStar* get_dotstar_upvalue(lua_State *L) {
+    if (!lua_islightuserdata(L, lua_upvalueindex(1))) {
+        luaL_error(L, "BUG: upvalue 1 not an Adafruit_DotStar light userdata");
+        return 0; // luaL_error doesn't return
+    }
+    Adafruit_DotStar* led = (Adafruit_DotStar*) lua_topointer(L, lua_upvalueindex(1));
+    if (!led) {
+        luaL_error(L, "BUG: upvalue is null");
+        return 0; // luaL_error doesn't return
+    }
+    return led;
+}
 
 static int lf_dotstar_set_brightness(lua_State *L) {
-    if (State_dotstar.dotstar == 0) return 0;
-
     int x = 256 * luaL_checknumber(L, 1);
     if (x < 0) x = 0;
     else if (x > 255) x = 255;
-
-    State_dotstar.dotstar->setBrightness(x);
-    if (State_dotstar.implicit_show) {
-        State_dotstar.dotstar->show();
-    }
+    get_dotstar_upvalue(L)->setBrightness(x);
     return 0;
+}
+
+static int lf_dotstar_set_brightness_show(lua_State *L) {
+    int r = lf_dotstar_set_brightness(L);
+    get_dotstar_upvalue(L)->show();
+    return r;
 }
 
 static int lf_dotstar_set_color(lua_State *L) {
-    if (State_dotstar.dotstar == 0) return 0;
-
     uint32_t x = luaL_checkinteger(L, 1);
-
-    State_dotstar.dotstar->setPixelColor(0, x);
-    if (State_dotstar.implicit_show) {
-        State_dotstar.dotstar->show();
-    }
+    get_dotstar_upvalue(L)->setPixelColor(0, x);
     return 0;
+}
+
+static int lf_dotstar_set_color_show(lua_State *L) {
+    int r = lf_dotstar_set_color(L);
+    get_dotstar_upvalue(L)->show();
+    return r;
 }
 
 static int lf_dotstar_show(lua_State *L) {
-    if (State_dotstar.dotstar == 0) return 0;
-    State_dotstar.dotstar->show();
+    get_dotstar_upvalue(L)->show();
     return 0;
 }
 
-void luatt_setup_funcs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool implicit_show) {
-    State_dotstar.dotstar = dotstar;
-    State_dotstar.implicit_show = implicit_show;
+void luatt_setfuncs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool implicit_show) {
+    static const struct luaL_Reg dotstar_show_table[] = {
+        { "set_brightness", lf_dotstar_set_brightness_show },
+        { "set_color",      lf_dotstar_set_color_show },
+        { "show",           lf_dotstar_show },
+        { 0, 0 }
+    };
 
     static const struct luaL_Reg dotstar_table[] = {
         { "set_brightness", lf_dotstar_set_brightness },
@@ -57,35 +68,48 @@ void luatt_setup_funcs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool imp
         { "show",           lf_dotstar_show },
         { 0, 0 }
     };
-    lua_newtable(L);
-    luaL_setfuncs(L, dotstar_table, 0);
-    lua_setglobal(L, "dotstar");
+
+    lua_pushlightuserdata(L, dotstar);
+    if (implicit_show) {
+        luaL_setfuncs(L, dotstar_show_table, 1);
+    }
+    else {
+        luaL_setfuncs(L, dotstar_table, 1);
+    }
 }
 
 
 ///////////////////////////////////
 // Red LED.
 
-static struct {
-    int pin;
-    bool active_low;
-} State_red_led = { -1 };
+static int get_red_led_pin(lua_State *L) {
+    if (!lua_isinteger(L, lua_upvalueindex(1))) {
+        luaL_error(L, "BUG: upvalue 1 (pin) is not an integer");
+        return 0; // luaL_error doesn't return
+    }
+    return lua_tointeger(L, lua_upvalueindex(1));
+}
+
+static bool get_red_led_active_low(lua_State *L) {
+    if (!lua_isboolean(L, lua_upvalueindex(2))) {
+        luaL_error(L, "BUG: upvalue 2 (active_low) is not a boolean");
+        return 0; // luaL_error doesn't return
+    }
+    return lua_toboolean(L, lua_upvalueindex(2));
+}
 
 static int lf_set_red_led(lua_State *L) {
-    if (State_red_led.pin == -1) return 0;
-
     uint32_t x = luaL_checkinteger(L, 1);
-    if (State_red_led.active_low) x = (x == 0);
-    digitalWrite(State_red_led.pin, x != 0);
+    if (get_red_led_active_low(L)) x = (x == 0);
+    digitalWrite(get_red_led_pin(L), x != 0);
     return 0;
 }
 
-void luatt_setup_funcs_red_led(lua_State* L, int led_pin, bool active_low) {
-    State_red_led.pin = led_pin;
-    State_red_led.active_low = active_low;
-
-    lua_pushcfunction(L, lf_set_red_led);
-    lua_setglobal(L, "set_red_led");
+void luatt_setfuncs_red_led(lua_State* L, int led_pin, bool active_low) {
+    lua_pushinteger(L, led_pin);
+    lua_pushboolean(L, active_low != 0);
+    lua_pushcclosure(L, lf_set_red_led, 2);
+    lua_setfield(L, -2, "set_red_led");
 }
 
 #endif

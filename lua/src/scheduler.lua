@@ -1,8 +1,10 @@
+local time = Luatt.time
+
 local scheduler = {}
 
 scheduler.recent_ms = time.millis()
 
-scheduler.pq = PriorityQueue{
+scheduler.pq = Luatt.pkgs.PriorityQueue{
     -- handle timestamp wrap-around
     higherpriority = function(a, b)
         return (a - scheduler.recent_ms) < (b - scheduler.recent_ms)
@@ -42,12 +44,13 @@ function scheduler.loop (ints)
         end
 
         co = scheduler.pq:dequeue()
+        local co_ints = scheduler.interrupts[co] or 0
         scheduler.interrupts[co] = nil
 
         -- Run thread coroutine.
-        set_mux_token(scheduler.tokens[co])
-        local r, t_inc, co_ints = coroutine.resume(co, ms)
-        set_mux_token("sched")
+        Luatt.set_mux_token(scheduler.tokens[co])
+        local r, t_inc, co_ints = coroutine.resume(co, ms, ints & co_ints)
+        Luatt.set_mux_token("sched")
 
         if r and t_inc then
             -- coroutine wants to sleep
@@ -57,6 +60,9 @@ function scheduler.loop (ints)
                 scheduler.interrupts[co] = co_ints
             end
         else
+            if not r and t_inc then
+                print("Error: " .. t_inc)
+            end
             -- coroutine has exited
             scheduler.tokens[co] = nil
             coroutine.close(co)
@@ -69,7 +75,7 @@ end
 
 -- Start a new thread after t_inc milliseconds.
 function scheduler.start (co, t_inc)
-    scheduler.tokens[co] = get_mux_token()
+    scheduler.tokens[co] = Luatt.get_mux_token()
     scheduler.pq:enqueue(co, time.millis() + math.floor(t_inc or 0))
 end
 
@@ -78,5 +84,7 @@ end
 function scheduler.wake (co, t_inc)
     scheduler.pq:update(co, time.millis() + math.floor(t_inc or 0))
 end
+
+Luatt.set_cb_sched_loop(scheduler.loop)
 
 return scheduler

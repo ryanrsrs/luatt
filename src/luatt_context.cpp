@@ -2,6 +2,7 @@
 #include "Adafruit_TinyUSB.h"
 
 #include "luatt_context.h"
+#include "luatt_funcs.h"
 
 struct lua_State* LUA = 0;
 
@@ -15,10 +16,39 @@ void Lua_Reset() {
     if (LUA) {
         lua_close(LUA);
     }
-
     LUA = luaL_newstate();
-    luaL_openlibs(LUA);
-    if (State_setup_cb) State_setup_cb(LUA);
+
+    lua_State* L = LUA;
+    luaL_openlibs(L);
+
+    // global Luatt table
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, "luatt_root");
+
+    // Luatt.pkgs
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, "luatt_pkgs");
+    lua_setfield(L, -2, "pkgs");
+
+    // Luatt.periphs
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, "luatt_periphs");
+    lua_setfield(L, -2, "periphs");
+
+    // Luatt.dbg
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, "luatt_dbg");
+    lua_setfield(L, -2, "dbg");
+
+    lua_setglobal(L, "Luatt");
+
+    luatt_setfuncs(L);
+
+    if (State_setup_cb) State_setup_cb(L);
 }
 
 int Lua_Loop(uint32_t interrupt_flags) {
@@ -27,19 +57,12 @@ int Lua_Loop(uint32_t interrupt_flags) {
 
     Serial.set_mux_token("sched");
 
-    int r = lua_getglobal(LUA, "scheduler");
-    if (r != LUA_TTABLE) {
-        lua_pop(LUA, lua_gettop(LUA));
-        return max_sleep;
-    }
-
-    r = lua_getfield(LUA, -1, "loop");
+    // Lua function scheduler.loop
+    int r = lua_getfield(LUA, LUA_REGISTRYINDEX, "luatt_sched_loop");
     if (r != LUA_TFUNCTION) {
-        lua_pop(LUA, lua_gettop(LUA));
+        lua_pop(LUA, 1);
         return max_sleep;
     }
-
-    lua_remove(LUA, -2);
 
     lua_pushinteger(LUA, interrupt_flags);
 
