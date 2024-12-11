@@ -13,7 +13,7 @@ Luatt_Loader::Buffer_t::Buffer_t(char* static_buf, size_t static_buf_size) {
     }
     else {
         // grows
-        max_size = 16 * 1024;
+        max_size = 24 * 1024;
         size = 1024;
         buf = (char*)malloc(size);
         is_static = false;
@@ -184,6 +184,7 @@ void Luatt_Loader::LoadLua(const char* name, const char* lua, size_t lua_len) {
         lua_setfield(LUA, -2, name);
         lua_pop(LUA, 1);
     }
+    lua_gc(LUA, LUA_GCCOLLECT);
     Serial.print("ret|ok\n");
 }
 
