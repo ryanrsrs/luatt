@@ -49,6 +49,24 @@ static int lf_dotstar_set_color_show(lua_State *L) {
     return r;
 }
 
+static int lf_dotstar_set_hsv(lua_State *L) {
+    uint16_t hue = luaL_checkinteger(L, 1);
+    int ok;
+    uint8_t sat = lua_tointegerx(L, 2, &ok);
+    if (!ok) sat = 255;
+    uint8_t val = lua_tointegerx(L, 3, &ok);
+    if (!ok) val = 255;
+    uint32_t rgb = Adafruit_DotStar::ColorHSV(hue, sat, val);
+    get_dotstar_upvalue(L)->setPixelColor(0, rgb);
+    return 0;
+}
+
+static int lf_dotstar_set_hsv_show(lua_State *L) {
+    int r = lf_dotstar_set_hsv(L);
+    get_dotstar_upvalue(L)->show();
+    return r;
+}
+
 static int lf_dotstar_show(lua_State *L) {
     get_dotstar_upvalue(L)->show();
     return 0;
@@ -58,6 +76,7 @@ void luatt_setfuncs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool implic
     static const struct luaL_Reg dotstar_show_table[] = {
         { "set_brightness", lf_dotstar_set_brightness_show },
         { "set_color",      lf_dotstar_set_color_show },
+        { "set_hsv",        lf_dotstar_set_hsv_show },
         { "show",           lf_dotstar_show },
         { 0, 0 }
     };
@@ -65,6 +84,7 @@ void luatt_setfuncs_dotstar(lua_State* L, Adafruit_DotStar* dotstar, bool implic
     static const struct luaL_Reg dotstar_table[] = {
         { "set_brightness", lf_dotstar_set_brightness },
         { "set_color",      lf_dotstar_set_color },
+        { "set_hsv",        lf_dotstar_set_hsv },
         { "show",           lf_dotstar_show },
         { 0, 0 }
     };
@@ -99,7 +119,7 @@ static bool get_red_led_active_low(lua_State *L) {
 }
 
 static int lf_set_red_led(lua_State *L) {
-    uint32_t x = luaL_checkinteger(L, 1);
+    int x = lua_toboolean(L, 1);
     if (get_red_led_active_low(L)) x = (x == 0);
     digitalWrite(get_red_led_pin(L), x != 0);
     return 0;
