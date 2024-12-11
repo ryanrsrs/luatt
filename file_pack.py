@@ -38,9 +38,8 @@ def Fill_Escapes():
 
 Fill_Escapes()
 
-def escaped_chars(path):
-    F = open(path, 'rb')
-    for b in F.read():
+def escaped_chars(f):
+    for b in f['data']:
         if b in Escapes:
             yield Escapes[b]
         else:
@@ -61,6 +60,38 @@ def match_prefix(s, prefix):
     if s[:n] == prefix:
         return s[n:]
     return None
+
+not_newlines = re.compile(b'[^\\n]+')
+
+def only_newlines(m):
+    if m.group(1):
+        # a long comment
+        return not_newlines.sub(b'', m.group()) or b' '
+    if m.group(3):
+        # a short comment
+        return not_newlines.sub(b'', m.group())
+    if m.group(4) or m.group(5):
+        # whitespace at start/end of line
+        return b''
+    if m.group(6):
+        # whitespace mid-line
+        return b' '
+    else:
+        # it's a string literal
+        return m.group()
+
+lua_comments = re.compile(
+    b"'(?:\\\\.|[^'])*'" +
+    b'|"(?:\\\\.|[^"])*"' +
+    b'|[ \\t]*(--)?\\[(=*)\\[(?s:.)*?\\]\\2\\][ \\t]*' +
+    b'|[ \\t]*(--)(?:\\[=*)?(?:[^[=\\n].*)?$' +
+    b'|^([ \\t]+)' +
+    b'|([ \\t]+)$' +
+    b'|([ \\t]{2,})',
+    re.MULTILINE)
+
+def strip_lua_comments(lua_code):
+    return lua_comments.sub(only_newlines, lua_code)
 
 OutputHeader = sys.stdout
 OutputSource = sys.stdout
@@ -85,6 +116,14 @@ for arg in sys.argv[1:]:
     f['name'] = os.path.splitext(os.path.split(arg)[1])[0]
     f['c_name'] = path_to_c_name(arg)
     f['size'] = os.path.getsize(arg)
+    with open(f['path'], 'rb') as data_f:
+        f['data'] = data_f.read()
+
+    if os.path.splitext(f['path'])[1] == '.lua':
+        # strip comments from Lua sources to save mem
+        f['data'] = strip_lua_comments(f['data'])
+        f['size'] = len(f['data'])
+
     Files.append(f)
 
 def emit_header(out):
@@ -124,7 +163,7 @@ def emit_source(out):
 
         line = [ '    "' ]
         line_len = len(line[0])
-        for s in escaped_chars(f['path']):
+        for s in escaped_chars(f):
             line.append(s)
             line_len += len(s)
             if line_len >= 72:

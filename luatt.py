@@ -602,9 +602,44 @@ def split_lua_name(s):
         file = s
     return (name, file)
 
+not_newlines = re.compile('[^\\n]+')
+
+def only_newlines(m):
+    if m.group(1):
+        # a long comment
+        return not_newlines.sub('', m.group()) or ' '
+    if m.group(3):
+        # a short comment
+        return not_newlines.sub('', m.group())
+    if m.group(4) or m.group(5):
+        # whitespace at start/end of line
+        return ''
+    if m.group(6):
+        # whitespace mid-line
+        return ' '
+    else:
+        # it's a string literal
+        return m.group()
+
+lua_comments = re.compile(
+    "'(?:\\\\.|[^'])*'" +
+    '|"(?:\\\\.|[^"])*"' +
+    '|[ \\t]*(--)?\\[(=*)\\[(?s:.)*?\\]\\2\\][ \\t]*' +
+    '|[ \\t]*(--)(?:\\[=*)?(?:[^[=\\n].*)?$' +
+    '|^([ \\t]+)' +
+    '|([ \\t]+)$' +
+    '|([ \\t]{2,})',
+    re.MULTILINE)
+
+def strip_lua_comments(lua_code):
+    return lua_comments.sub(only_newlines, lua_code)
+
 def load_data(name, data):
     token = new_token()
     QS[token] = ReplQ
+    n = len(data)
+    data = strip_lua_comments(data)
+    print_line(f'strip {n} -> {len(data)}')
     write_command(Conn['fd'], token, "load", name, data)
     wait_for_ret(ReplQ, token)
     del QS[token]
