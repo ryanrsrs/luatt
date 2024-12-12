@@ -9,7 +9,7 @@
 struct lua_State;
 
 class Adafruit_NeoPixel;
-void luatt_setup_funcs_neopixel(lua_State* L, Adafruit_NeoPixel* neopix, bool implicit_show=true);
+void luatt_setfuncs_neopixel(lua_State* L, Adafruit_NeoPixel* neopix, bool implicit_show=true);
 
 #endif
 

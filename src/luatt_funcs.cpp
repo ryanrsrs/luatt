@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
-#include <nrfx.h>
 
 #include <malloc.h>
 
@@ -116,13 +115,6 @@ static int lf_set_cb_on_msg(struct lua_State* L) {
     return 0;
 }
 
-static int lf_get_device_id(lua_State *L) {
-    char buf[20];
-    snprintf(buf, sizeof(buf), "%08lx_%08lx", NRF_FICR->DEVICEID[0], NRF_FICR->DEVICEID[1]);
-    lua_pushstring(L, buf);
-    return 1;
-}
-
 void luatt_setfuncs(lua_State* L) {
     // Luatt root table
     lua_getfield(L, LUA_REGISTRYINDEX, "luatt_root");
@@ -132,7 +124,6 @@ void luatt_setfuncs(lua_State* L) {
         { "set_cb_on_msg",     lf_set_cb_on_msg },
         { "get_mux_token",  lf_get_mux_token },
         { "set_mux_token",  lf_set_mux_token },
-        { "get_device_id",  lf_get_device_id },
         { 0, 0 }
     };
     luaL_setfuncs(L, luatt_table, 0);

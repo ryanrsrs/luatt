@@ -41,25 +41,38 @@ static int lf_neopix_set_color(lua_State *L) {
     return 0;
 }
 
+static int lf_neopix_set_hsv(lua_State *L) {
+    if (State_neopix.neopix == 0) return 0;
+
+    uint16_t hue = luaL_checkinteger(L, 1);
+    int ok;
+    uint8_t sat = lua_tointegerx(L, 2, &ok);
+    if (!ok) sat = 255;
+    uint8_t val = lua_tointegerx(L, 3, &ok);
+    if (!ok) val = 255;
+    uint32_t rgb = Adafruit_NeoPixel::ColorHSV(hue, sat, val);
+    State_neopix.neopix->setPixelColor(0, rgb);
+    return 0;
+}
+
 static int lf_neopix_show(lua_State *L) {
     if (State_neopix.neopix == 0) return 0;
     State_neopix.neopix->show();
     return 0;
 }
 
-void luatt_setup_funcs_neopixel(lua_State* L, Adafruit_NeoPixel* neopix, bool implicit_show) {
+void luatt_setfuncs_neopixel(lua_State* L, Adafruit_NeoPixel* neopix, bool implicit_show) {
     State_neopix.neopix = neopix;
     State_neopix.implicit_show = implicit_show;
 
     static const struct luaL_Reg neopix_table[] = {
         { "set_brightness", lf_neopix_set_brightness },
         { "set_color",      lf_neopix_set_color },
+        { "set_hsv",        lf_neopix_set_hsv },
         { "show",           lf_neopix_show },
         { 0, 0 }
     };
-    lua_newtable(L);
     luaL_setfuncs(L, neopix_table, 0);
-    lua_setglobal(L, "rgb_led");
 }
 
 #endif
