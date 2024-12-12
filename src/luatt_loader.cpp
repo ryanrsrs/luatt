@@ -38,7 +38,9 @@ int Luatt_Loader::Buffer_t::add(int ch) {
         return -1;
     }
     if (len == size && !is_static) {
-        size *= 2;
+        size_t inc = size;
+        if (inc > 2048) inc = 2048;
+        size += inc;
         if (size > max_size) {
             size = max_size;
         }
