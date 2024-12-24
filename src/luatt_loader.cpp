@@ -230,6 +230,7 @@ int Luatt_Loader::Parse_Line()
 {
     Args_n = 0;
     Raw_n = 0;
+    bool final_empty_arg = false;
 
     size_t p = 0;
     int i = 0;
@@ -246,8 +247,15 @@ int Luatt_Loader::Parse_Line()
             Args[i].off = p;
             Args[i].len = next - s;
             p = (next - Buffer.buf) + 1;
+            if (p == Buffer.len) {
+                // Tricky edge case: last character in line was '|'
+                // This means there is a zero-length last arg, but the
+                // while loop is going to exit.
+                final_empty_arg = true;
+            }
         }
         else {
+            // last arg goes to end of line
             Args[i].off = p;
             Args[i].len = n;
             p = Buffer.len;
@@ -264,6 +272,15 @@ int Luatt_Loader::Parse_Line()
             Raw[Raw_n].bytes = bytes;
             Raw_n++;
         }
+        i++;
+    }
+    if (final_empty_arg) {
+        if (i >= LUATT_MAX_ARGS) {
+            Serial.printf("error|%s:%i,too many args, limit %i.\n", __FILE__, __LINE__, LUATT_MAX_ARGS);
+            return -1;
+        }
+        Args[i].off = Buffer.len;
+        Args[i].len = 0;
         i++;
     }
     Args_n = i;
