@@ -11,6 +11,7 @@
 // These interface our C++ APIs with Lua's calling conventions.
 
 static uint32_t State_rollovers = 0;
+static uint64_t State_unix_offset_ms = 0;
 
 static int lf_time_millis(lua_State *L) {
     static int32_t last_ms;
@@ -34,14 +35,33 @@ static int lf_time_rollovers(lua_State *L) {
     return 1;
 }
 
+static uint64_t uptime_ms() {
+    uint64_t ms = State_rollovers;
+    ms <<= 32;
+    ms += millis();
+    return ms;
+}
+
 static int lf_time_uptime(lua_State* L) {
-    int ms = millis();
-    uint64_t secs = State_rollovers;
-    secs <<= 32;
-    secs += ms;
-    secs /= 1000;
-    lua_pushinteger(L, (int)secs);
+    int secs = uptime_ms() / 1000;
+    lua_pushinteger(L, secs);
     return 1;
+}
+
+static int lf_time_set_unix(lua_State* L) {
+    uint64_t unix_ms = luaL_checkinteger(L, 1); // secs
+    unix_ms *= 1000;
+    unix_ms += luaL_checkinteger(L, 2); // millisecs
+
+    State_unix_offset_ms = unix_ms - uptime_ms();
+    return 0;
+}
+
+static int lf_time_get_unix(lua_State* L) {
+    uint64_t unix = State_unix_offset_ms + uptime_ms();
+    lua_pushinteger(L, (int)(unix / 1000));
+    lua_pushinteger(L, (int)(unix % 1000));
+    return 2;
 }
 
 static int lf_time_delay(lua_State* L) {
@@ -135,6 +155,8 @@ void luatt_setfuncs(lua_State* L) {
         { "micros",    lf_time_micros },
         { "rollovers", lf_time_rollovers },
         { "uptime",    lf_time_uptime },
+        { "set_unix",  lf_time_set_unix },
+        { "get_unix",  lf_time_get_unix },
         { "delay",     lf_time_delay },
         { "yield",     lf_time_yield },
         { 0, 0 }

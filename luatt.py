@@ -60,6 +60,7 @@
 import ctypes
 import fcntl
 import json
+import math
 import os
 import queue
 import re
@@ -137,7 +138,7 @@ def print_line(msg, label='', color=''):
         if Force_Update: readline.forced_update()
     elif LogFile:
         #LogFile.write(f"{label}{msg}\n")
-        LogFile.write(f"{start}{label}{msg}{end}\n")
+        LogFile.write(f"{time.time():.6f} {start}{label}{msg}{end}\n")
 
 def printer_serial(msg, label='', color=''):
     if not LogFile: return
@@ -541,6 +542,10 @@ if not Conn['is_socket']:
     th_serial.start()
     wait_for_version(ReplQ)
     del QS['sched']
+    tt = time.time()
+    tt_sec = math.floor(tt)
+    tt_ms = math.floor(1e3 * (tt - tt_sec))
+    write_command(Conn['fd'], "noret", "eval", f"Luatt.time.set_unix({tt_sec},{tt_ms})")
 else:
     th_serial.start()
     write_command(Conn['fd'], "noret", "reconnect", str(os.getppid()))
