@@ -109,9 +109,24 @@ else:
     lib = ctypes.cdll.LoadLibrary('libreadline.so.' + version)
 readline.forced_update = lib.rl_forced_update_display
 
+def decode_or_repr(bstr):
+    try:
+        return bstr.decode('utf-8')
+    except UnicodeDecodeError:
+        return repr(bstr)
+
+def coerce_string(bstr):
+    if type(bstr) == bytes:
+        try:
+            return bstr.decode('utf-8')
+        except UnicodeDecodeError:
+            return repr(bstr)[2:-1]
+    return bstr
+
 # Use multi-colored output for the debugging output.
 # TODO: add options to control debug output and logging
 def print_line(msg, label='', color=''):
+    msg = coerce_string(msg)
     start = ''
     end = ''
     if LogColor and color:
@@ -260,10 +275,11 @@ def is_clean(b):
 
 # Escape field only if needed.
 # Returns (field, trailer)
-#   "123"  => ("123", None)
-#   "1\t3" => ("&3", "1\t3")
-def escape_arg(s):
-    bstr = s.encode('utf-8')
+#   "123"  => (b"123", None)
+#   "1\t3" => (b"&3", b"1\t3")
+def escape_arg(bstr):
+    if type(bstr) == str:
+        bstr = bstr.encode('utf-8')
     if is_clean(bstr):
         return (bstr, None)
     else:
@@ -281,7 +297,7 @@ def new_token():
     return f"{os.getppid()}/{os.getpid()}/{secrets.token_hex(12)}"
 
 # Encodes a command and sends it upstream, either to the microcontroller,
-# of an upstream luatt.py process.
+# or an upstream luatt.py process.
 def write_command(fd, token, *args):
     out = [[token.encode('utf-8')]]
     for arg, raw in map(escape_arg, args):
@@ -293,7 +309,7 @@ def write_command(fd, token, *args):
     out = b'\n'.join(out)
 
     # TODO: add real logging here
-    line = line.decode('utf-8')
+    line = repr(line)
     if LogFile:
         if Conn['fd'] == fd:
             if Conn['is_socket']:
@@ -318,30 +334,19 @@ def write_command(fd, token, *args):
 # Pass next_partial on the next call to read_packet_line or
 # read_packet_bytes.
 def read_packet_line(fd, partial):
-    if '\n' in partial:
+    if b'\n' in partial:
         # we can satisfy request entirely from buffered input
-        return partial.split('\n', 1)
+        return partial.split(b'\n', 1)
     line = [partial]
     while not Quit:
         rd, wr, ex = select.select([fd], [], [fd])
         if fd in ex: break
         if fd not in rd: continue
         buf = os.read(fd, 4096)
-        bd = buf
-        try:
-            buf = bd.decode('utf-8')
-        except UnicodeDecodeError:
-            print('\r\n\n----------\r\n')
-            print('Error: utf-8 decode failed.')
-            print(len(bd))
-            print(repr(bd))
-            print('----------\r\n\r\n')
-            raise
-        if not buf: continue
-        parts = buf.split('\n', 1)
+        parts = buf.split(b'\n', 1)
         line.append(parts[0])
         if len(parts) == 1: continue
-        return (''.join(line), parts[1])
+        return (b''.join(line), parts[1])
     # quitting...
     return None
 
@@ -355,7 +360,7 @@ def read_packet_bytes(fd, n, partial):
     while not Quit and n >= 0:
         rd, wr, ex = select.select([fd], [], [fd])
         if fd not in rd: continue
-        buf = os.read(fd, 4096).decode('utf-8')
+        buf = os.read(fd, 4096)
         #print_line(f"read2({repr(buf)})")
         if not buf: continue
         #SerialLog.write(buf)
@@ -364,7 +369,7 @@ def read_packet_bytes(fd, n, partial):
         n -= len(buf)
     if Quit:
         return None
-    line = ''.join(line)
+    line = b''.join(line)
     return (line[:n], line[n:][1:]) # skip newline
 
 # Microcontroller publishes MQTT message.
@@ -372,7 +377,7 @@ def dev_cmd_pub(cmd):
     if len(cmd) != 4:
         print("Error: pub needs 4 args.")
         return
-    topic = cmd[2]
+    topic = coerce_string(cmd[2])
     payload = cmd[3]
     paho_client.publish(topic, payload)
 
@@ -381,7 +386,7 @@ def dev_cmd_sub(cmd):
     if len(cmd) != 3:
         print("Error: sub needs 3 args.")
         return
-    topic = cmd[2]
+    topic = coerce_string(cmd[2])
     Subscriptions.add(topic)
     paho_client.subscribe(topic)
 
@@ -390,7 +395,7 @@ def dev_cmd_unsub(cmd):
     if len(cmd) != 3:
         print("Error: unsub needs 3 args.")
         return
-    topic = cmd[2]
+    topic = coerce_string(cmd[2])
     if topic == '*':
         for topic in Subscriptions:
             paho_client.unsubscribe(topic)
@@ -407,8 +412,8 @@ def process_serial_packet(packet):
         print_line(repr(packet), "pckt> ", 103)
         return
     print_line(repr(packet), "pckt> ", 103)
-    token = packet[0]
-    cmd = packet[1]
+    token = coerce_string(packet[0])
+    cmd = coerce_string(packet[1])
 
     # MQTT commands
     if paho_client and cmd == 'pub':
@@ -426,7 +431,8 @@ def process_serial_packet(packet):
         if q is not None:
             q.put(packet)
         elif token.split('/')[0] in (str(os.getppid()), 'sched'):
-            body = '|'.join(packet[1:])
+            body = map(decode_or_repr, packet[1:])
+            body = '|'.join(body)
             if Enable_REPL:
                 sys.stdout.write(f"\033[2K\r{body}\n")
                 if Force_Update: readline.forced_update()
@@ -451,14 +457,14 @@ def read_packet(fd, partial, printer):
 
     line, partial = v
 
-    if 'error' in line.lower():
+    if b'error' in line.lower():
         printer(line, color=91)
     else:
         printer(line)
 
     fields = []
-    for f in line.split('|'):
-        if f[:1] == '&':
+    for f in line.split(b'|'):
+        if f[:1] == b'&':
             n = int(f[1:])
             v = read_packet_bytes(fd, n, partial)
             if v is None: return
@@ -473,7 +479,7 @@ MainThread = threading.get_ident()
 # Thread to read packets from the serial port or unix socket.
 def read_serial():
     global Quit, Enable_REPL
-    partial = ''
+    partial = b''
     while not Quit:
         v = read_packet(Conn['fd'], partial, printer_serial)
         if not v:
@@ -492,10 +498,10 @@ def read_serial():
 def wait_for_ret(q, token):
     while not Quit:
         v = q.get()
-        body = '|'.join(v[1:])
-        if v[0] == token:
-            sys.stdout.write(body + "\n")
-            if v[1] == 'ret':
+        body = b'|'.join(v[1:])
+        if coerce_string(v[0]) == token:
+            sys.stdout.write(coerce_string(body) + "\n")
+            if v[1] == b'ret':
                 return v
     return None
 
@@ -504,8 +510,8 @@ def wait_for_ret(q, token):
 def wait_for_version(q):
     while not Quit:
         v = q.get()
-        if v[0] == 'sched' and v[1] == 'version':
-            sys.stdout.write('|'.join(v) + "\n")
+        if v[0] == b'sched' and v[1] == b'version':
+            sys.stdout.write(coerce_string(b'|'.join(v)) + "\n")
             return v
     return None
 
@@ -540,25 +546,12 @@ else:
     write_command(Conn['fd'], "noret", "reconnect", str(os.getppid()))
 
 
-# The callback for when the client receives a CONNACK response from the server.
-def on_connect(client, userdata, flags, reason_code):
-    # Subscribing in on_connect() means that if we lose the connection and
-    # reconnect then subscriptions will be renewed.
-    print_line(f"Connected with result code {reason_code}", 'mqtt  ', 106)
-    for topic in Subscriptions:
-        client.subscribe(topic)
-
-# The callback for when a PUBLISH message is received from the server.
-def on_message(client, userdata, msg):
-    print_line(msg.topic+" "+str(msg.payload), 'mqtt  ', 106)
-    write_command(Conn['fd'], "noret", "msg", msg.topic, msg.payload.decode('utf-8'))
-
 # Socket server to handle unix domain connections from downstream luatt.py processes.
 # Each downstream connected luatt.py gets a new thread to babysit it.
 class SocketHandler(socketserver.BaseRequestHandler):
     def handle(self):
         last_token = None
-        partial = ''
+        partial = b''
         while not Quit:
             v = read_packet(self.request.fileno(), partial, printer_sock)
             if not v: break
@@ -567,7 +560,7 @@ class SocketHandler(socketserver.BaseRequestHandler):
             if last_token:
                 del Downstreams[last_token]
                 last_token = None
-            token = packet[0]
+            token = coerce_string(packet[0])
             if token != '' and token != 'noret':
                 Downstreams[token] = self.request.fileno()
                 last_token = token
