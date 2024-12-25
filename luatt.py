@@ -168,6 +168,31 @@ def open_socket(path):
     return sock
 
 
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect_v2(client, userdata, flags, reason_code, properties):
+    # Subscribing in on_connect() means that if we lose the connection and
+    # reconnect then subscriptions will be renewed.
+    if reason_code.is_failure:
+        print_line(f"Failed to connect: {reason_code.getName()}", 'mqtt  ', 106)
+        return
+    print_line(f"Connected with result code {reason_code.getName()}", 'mqtt  ', 106)
+    for topic in Subscriptions:
+        client.subscribe(topic)
+
+def on_connect_v1(client, userdata, flags, rc):
+    if rc:
+        print_line(f"Failed to connect: rc={rc}", 'mqtt  ', 106)
+        return
+    print_line(f"Connected with result code rc={rc}", 'mqtt  ', 106)
+    for topic in Subscriptions:
+        client.subscribe(topic)
+
+
+# The callback for when a PUBLISH message is received from the server.
+def on_message(client, userdata, msg):
+    print_line(msg.topic+" "+str(msg.payload), 'mqtt  ', 106)
+    write_command(Conn['fd'], "noret", "msg", msg.topic, msg.payload)
+
 # Open device and determine if we're talking to a USB serial device or
 # a unix socket.
 Conn = { 'path': sys.argv[1] }
@@ -185,7 +210,18 @@ if Conn['is_socket']:
     paho_client = None
 elif paho_client is not None:
     # Only create when talking to serial device.
-    paho_client = paho_client.Client()
+    if not hasattr(paho_client, 'CallbackAPIVersion'):
+        # paho-mqtt 1.x, default on OpenWrt
+        paho_client = paho_client.Client()
+        paho_client.on_connect = on_connect_v1
+        paho_client.on_message = on_message
+    else:
+        # paho-mqtt 2+, preferred
+        version = paho_client.CallbackAPIVersion.VERSION2
+        paho_client = paho_client.Client(version)
+        paho_client.on_connect = on_connect_v2
+        paho_client.on_message = on_message
+
 
 # We use a mostly-text protocol to talk to the microcontroller.
 #
@@ -730,8 +766,6 @@ for arg in sys.argv[2:]:
             sys.exit(2)
 
         # Connect to MQTT Broker
-        paho_client.on_connect = on_connect
-        paho_client.on_message = on_message
         if ":" in arg:
             ip, port = arg.split(":", 1)
             port = int(port)
