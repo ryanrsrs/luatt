@@ -143,6 +143,9 @@ def emit_header(out):
     out.write('    const char* data;\n')
     out.write('};\n')
     out.write('\n')
+    out.write('// null-pointer terminated list of files\n')
+    out.write('extern const struct Packed_File_t* const File_LIST[];\n')
+    out.write('\n')
     for f in Files:
         out.write('extern const struct Packed_File_t File_' + f['c_name'] + ';\n')
     out.write('\n')
@@ -154,6 +157,12 @@ def emit_header(out):
 
 def emit_source(out):
     out.write('#include "packed_files.h"\n')
+    out.write('\n')
+    out.write('const struct Packed_File_t* const File_LIST[] = {\n')
+    for f in Files:
+        out.write('    &File_' + f['c_name'] + ',\n')
+    out.write('    0\n')
+    out.write('};\n')
     out.write('\n')
     for f in Files:
         out.write('const struct Packed_File_t File_' + f['c_name'] + ' = {\n')
