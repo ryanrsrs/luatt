@@ -43,30 +43,41 @@ function scheduler.loop (ints)
             return t - ms
         end
 
+        local r, t_inc, co_ints
         co = scheduler.pq:dequeue()
-        local co_ints = scheduler.interrupts[co] or 0
+        co_ints = scheduler.interrupts[co] or 0
         scheduler.interrupts[co] = nil
+
+        if coroutine.status(co) == "dead" then
+            -- coroutine was closed from another thread
+            scheduler.tokens[co] = nil
+            coroutine.close(co)
+            goto continue
+        end
 
         -- Run thread coroutine.
         Luatt.set_mux_token(scheduler.tokens[co])
-        local r, t_inc, co_ints = coroutine.resume(co, ms, ints & co_ints)
+        r, t_inc, co_ints = coroutine.resume(co, ms, ints & co_ints)
         Luatt.set_mux_token("sched")
 
-        if r and t_inc then
+        if coroutine.status(co) == "dead" then
+            -- coroutine has exited
+            if not r then
+                -- because of error
+                print("Error: " .. t_inc)
+            end
+            scheduler.tokens[co] = nil
+            coroutine.close(co)
+        else
             -- coroutine wants to sleep
+            t_inc = t_inc or 0
             scheduler.pq:enqueue(co, time.millis() + math.floor(t_inc))
             if co_ints and co_ints > 0 then
                 -- coroutine is listening for interrupts
                 scheduler.interrupts[co] = co_ints
             end
-        else
-            if not r and t_inc then
-                print("Error: " .. t_inc)
-            end
-            -- coroutine has exited
-            scheduler.tokens[co] = nil
-            coroutine.close(co)
         end
+        ::continue::
     end
     -- All threads have exited, so just sleep for a second.
     -- We'll be called early if a new thread is created.
