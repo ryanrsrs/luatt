@@ -163,7 +163,6 @@ def open_serial(path):
 
     # [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
     tt = termios.tcgetattr(fd)
-
     tt[0] = termios.IGNBRK | termios.IGNPAR
     tt[1] = 0
     tt[2] = termios.CS8 | termios.CREAD | termios.CLOCAL | termios.HUPCL
@@ -173,7 +172,7 @@ def open_serial(path):
     for i in range(termios.VEOL2+1):
         tt[6][i] = b'\0'
 
-    termios.tcflush(fd, termios.TCIFLUSH)
+    termios.tcflush(fd, termios.TCIOFLUSH)
     termios.tcsetattr(fd, termios.TCSANOW, tt)
     return fd
 
@@ -340,10 +339,10 @@ def read_packet_line(fd, partial):
         return partial.split(b'\n', 1)
     line = [partial]
     while not Quit:
-        rd, wr, ex = select.select([fd], [], [fd])
-        if fd in ex: break
+        rd, wr, ex = select.select([fd], [], [])
         if fd not in rd: continue
         buf = os.read(fd, 4096)
+        if not buf: break
         parts = buf.split(b'\n', 1)
         line.append(parts[0])
         if len(parts) == 1: continue
@@ -359,13 +358,10 @@ def read_packet_bytes(fd, n, partial):
     line = [partial]
     n -= len(partial)
     while not Quit and n >= 0:
-        rd, wr, ex = select.select([fd], [], [fd])
+        rd, wr, ex = select.select([fd], [], [])
         if fd not in rd: continue
         buf = os.read(fd, 4096)
-        #print_line(f"read2({repr(buf)})")
-        if not buf: continue
-        #SerialLog.write(buf)
-        #SerialLog.flush()
+        if not buf: return None
         line.append(buf)
         n -= len(buf)
     if Quit:
@@ -510,7 +506,11 @@ def wait_for_ret(q, token):
 # microcontroller to send a version line automatically.
 def wait_for_version(q):
     while not Quit:
-        v = q.get()
+        try:
+            v = q.get(True, 2)
+        except queue.Empty:
+            # timeout
+            sys.exit(3)
         if v[0] == b'sched' and v[1] == b'version':
             sys.stdout.write(coerce_string(b'|'.join(v)) + "\n")
             return v
@@ -804,7 +804,6 @@ except (EOFError, KeyboardInterrupt):
     print()
     pass
 finally:
-    print("finally")
     Quit = True
     if Server:
         Server.shutdown()
