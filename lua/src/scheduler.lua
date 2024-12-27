@@ -13,6 +13,7 @@ scheduler.pq = Luatt.pkgs.PriorityQueue{
 
 scheduler.interrupts = {}
 scheduler.tokens = {}
+scheduler.args = {}
 
 -- Called by the main Arduino loop.
 -- The C code looks up "scheduler.loop" in the Lua global scope and calls it.
@@ -43,10 +44,13 @@ function scheduler.loop (ints)
             return t - ms
         end
 
-        local r, t_inc, co_ints
+        local r, t_inc, co_ints, args
         co = scheduler.pq:dequeue()
         co_ints = scheduler.interrupts[co] or 0
         scheduler.interrupts[co] = nil
+
+        args = scheduler.args[co]
+        scheduler.args[co] = nil
 
         if coroutine.status(co) == "dead" then
             -- coroutine was closed from another thread
@@ -57,7 +61,12 @@ function scheduler.loop (ints)
 
         -- Run thread coroutine.
         Luatt.set_mux_token(scheduler.tokens[co])
-        r, t_inc, co_ints = coroutine.resume(co, ms, ints & co_ints)
+        -- scheduler.args[] is only for the first resume (the function args)
+        if args == nil then
+            -- subsequently, these are returned by yield()
+            args = { ms, ints & co_ints }
+        end
+        r, t_inc, co_ints = coroutine.resume(co, table.unpack(args, 1, args.n))
         Luatt.set_mux_token("sched")
 
         if coroutine.status(co) == "dead" then
@@ -85,8 +94,9 @@ function scheduler.loop (ints)
 end
 
 -- Start a new thread after t_inc milliseconds.
-function scheduler.start (co, t_inc)
+function scheduler.start (co, t_inc, ...)
     scheduler.tokens[co] = Luatt.get_mux_token()
+    scheduler.args[co] = table.pack(...)
     scheduler.pq:enqueue(co, time.millis() + math.floor(t_inc or 0))
 end
 
