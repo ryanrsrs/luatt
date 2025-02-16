@@ -38,7 +38,7 @@ static int lf_time_rollovers(lua_State *L) {
 static uint64_t uptime_ms() {
     uint64_t ms = State_rollovers;
     ms <<= 32;
-    ms += millis();
+    ms += (int32_t)millis();
     return ms;
 }
 
