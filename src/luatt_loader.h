@@ -47,15 +47,19 @@ class Luatt_Loader {
     void Command_Reset();
     void Command_Eval();
     void Command_Load();
+    void Command_Compile();
     void Command_Msg();
 
     void Feed_Char(int ch);
+
+    void CompileLua(const char* name, const char* lua, size_t lua_len);
 
 public:
     Luatt_Loader(char* static_buf=0, size_t static_buf_size=0);
     ~Luatt_Loader();
 
     void LoadLua(const char* name, const char* lua, size_t lua_len);
+    void LoadBin(const char* name, const char* bin, size_t bin_len);
 
     int Loop();
 };

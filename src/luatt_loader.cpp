@@ -92,6 +92,7 @@ void Luatt_Loader::Run_Command() {
     if      (!strcmp(cmd, "reset")) Command_Reset();
     else if (!strcmp(cmd,  "eval")) Command_Eval();
     else if (!strcmp(cmd,  "load")) Command_Load();
+    else if (!strcmp(cmd,  "compile")) Command_Compile();
     else if (!strcmp(cmd,   "msg")) Command_Msg();
     else {
         // unrecognized command
@@ -154,8 +155,82 @@ void Luatt_Loader::Command_Eval() {
     Serial.print("ret|ok\n");
 }
 
+static int Dump_I;
+
+int dump_output(lua_State* L, const void* p, size_t sz, void* arg) {
+    const char* name = (const char*)arg;
+    const uint8_t* src = (const uint8_t*)p;
+    while (sz > 0) {
+        if (Dump_I >= 80) {
+            Serial.printf("\n");
+            Serial.printf("dump|%s|", name);
+            Dump_I = 0;
+        }
+        Serial.printf("%02x", *src++);
+        sz--;
+        Dump_I++;
+    }
+    return 0;
+}
+
+void Luatt_Loader::CompileLua(const char* name, const char* lua, size_t lua_len) {
+    int r = luaL_loadbufferx(LUA, lua, lua_len, name, "t");
+    if (r != LUA_OK) {
+        const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        lua_pop(LUA, 1);
+        Serial.print("ret|fail\n");
+        return;
+    }
+
+    Serial.printf("dump|%s|", name);
+    Dump_I = 0;
+    lua_dump(LUA, dump_output, (void*)name, 0);
+    Serial.printf("\n");
+
+    lua_pop(LUA, 1);
+    Serial.print("ret|ok\n");
+    return;
+}
+
 void Luatt_Loader::LoadLua(const char* name, const char* lua, size_t lua_len) {
     int r = luaL_loadbufferx(LUA, lua, lua_len, name, "t");
+    if (r != LUA_OK) {
+        const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        lua_pop(LUA, 1);
+        Serial.print("ret|fail\n");
+        return;
+    }
+
+    r = lua_pcall(LUA, 0, 1, 0);
+    if (r != LUA_OK) {
+        const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
+        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        lua_pop(LUA, 1);
+        Serial.print("ret|fail\n");
+        return;
+    }
+
+    if (lua_isnil(LUA, -1)) {
+        // Lua module returned nil.
+        lua_pop(LUA, 1);
+    }
+    else {
+        // Assign module result to Luatt.pkgs
+        lua_getglobal(LUA, "Luatt");
+        lua_getfield(LUA, -1, "pkgs");
+        lua_remove(LUA, -2); // Luatt
+        lua_rotate(LUA, -2, 1);
+        lua_setfield(LUA, -2, name);
+        lua_pop(LUA, 1);
+    }
+    lua_gc(LUA, LUA_GCCOLLECT);
+    Serial.print("ret|ok\n");
+}
+
+void Luatt_Loader::LoadBin(const char* name, const char* bin, size_t bin_len) {
+    int r = luaL_loadbufferx(LUA, bin, bin_len, name, "b");
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
         Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
@@ -197,6 +272,15 @@ void Luatt_Loader::Command_Load() {
         return;
     }
     LoadLua(Buffer.buf + Args[2].off, Buffer.buf + Args[3].off, Args[3].len);
+}
+
+void Luatt_Loader::Command_Compile() {
+    if (Args_n != 4) {
+        Serial.printf("error|%s:%i,compile requires 4 args, %i given.\n", __FILE__, __LINE__, Args_n);
+        Serial.print("ret|fail\n");
+        return;
+    }
+    CompileLua(Buffer.buf + Args[2].off, Buffer.buf + Args[3].off, Args[3].len);
 }
 
 void Luatt_Loader::Command_Msg() {
