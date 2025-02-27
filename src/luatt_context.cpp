@@ -1,8 +1,12 @@
-#include <Arduino.h>
-#include "Adafruit_TinyUSB.h"
+#ifdef __ZEPHYR__
+#include <zephyr/logging/log.h>
+#endif
 
 #include "luatt_context.h"
 #include "luatt_funcs.h"
+#include "luatt_osal.h"
+
+LOG_MODULE_REGISTER(luatt_context, LOG_LEVEL_DBG);
 
 struct lua_State* LUA = 0;
 
@@ -55,7 +59,7 @@ int Lua_Loop(uint32_t interrupt_flags) {
     int max_sleep = 5000;
     if (!LUA) return max_sleep;
 
-    Serial.set_mux_token("sched");
+    luatt_set_mux_token("sched");
 
     // Lua function scheduler.loop
     int r = lua_getfield(LUA, LUA_REGISTRYINDEX, "luatt_sched_loop");
@@ -69,7 +73,7 @@ int Lua_Loop(uint32_t interrupt_flags) {
     r = lua_pcall(LUA, 1, 1, 0);
     if (r != LUA_OK) {
         const char* err_str = lua_tostring(LUA, lua_gettop(LUA));
-        Serial.printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
+        luatt_printf("error|%s:%i,%i,%s\n", __FILE__, __LINE__, r, err_str);
         lua_pop(LUA, 1);
         return max_sleep;
     }

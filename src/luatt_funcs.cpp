@@ -1,10 +1,17 @@
-#include <Arduino.h>
-#include <Adafruit_TinyUSB.h>
+#ifdef ARDUINO
+    #include <Arduino.h>
+    #include <Adafruit_TinyUSB.h>
+#elif defined(__ZEPHYR__)
+    #include <zephyr/kernel.h>
+    #include <zephyr/sys/printk.h>
+    #include <zephyr/sys/sys_heap.h>
+#endif
 
 #include <malloc.h>
 
 #include "luatt_context.h"
 #include "luatt_funcs.h"
+#include "luatt_osal.h"
 
 // Wrapper functions exported to Lua.
 //
@@ -15,7 +22,7 @@ static uint64_t State_unix_offset_ms = 0;
 
 static int lf_time_millis(lua_State *L) {
     static int32_t last_ms;
-    int32_t ms = (int32_t) millis();
+    int32_t ms = (int32_t) luatt_millis();
     if (ms < last_ms) State_rollovers++;
     last_ms = ms;
     lua_pushinteger(L, ms);
@@ -23,7 +30,7 @@ static int lf_time_millis(lua_State *L) {
 }
 
 static int lf_time_micros(lua_State *L) {
-    uint32_t us = micros();
+    uint32_t us = luatt_micros();
     lua_pushinteger(L, us);
     return 1;
 }
@@ -38,7 +45,7 @@ static int lf_time_rollovers(lua_State *L) {
 static uint64_t uptime_ms() {
     uint64_t ms = State_rollovers;
     ms <<= 32;
-    ms += (int32_t)millis();
+    ms += (int32_t)luatt_millis();
     return ms;
 }
 
@@ -66,12 +73,12 @@ static int lf_time_get_unix(lua_State* L) {
 
 static int lf_time_delay(lua_State* L) {
     int ms = luaL_checkinteger(L, 1);
-    delay(ms);
+    luatt_delay(ms);
     return 0;
 }
 
 static int lf_time_yield(lua_State* L) {
-    yield();
+    luatt_yield();
     return 0;
 }
 
@@ -80,22 +87,35 @@ static int lf_meminfo(lua_State *L) {
 #ifdef ARDUINO_NRF52840_ITSYBITSY
     dbgMemInfo();
 #elif defined(ARDUINO_RASPBERRY_PI_PICO)
-    Serial.printf("Heap used: %i\n", rp2040.getUsedHeap());
-    Serial.printf("Heap free: %i\n", rp2040.getFreeHeap());
+    luatt_printf("Heap used: %i\n", rp2040.getUsedHeap());
+    luatt_printf("Heap free: %i\n", rp2040.getFreeHeap());
+#elif defined(__ZEPHYR__)
+    luatt_print("Error: dbgMemInfo() not supported.\n");
 #else
-    Serial.print("Error: dbgMemInfo() not supported.\n");
+    luatt_print("Error: dbgMemInfo() not supported.\n");
 #endif
     return 0;
 }
 
 static int lf_get_mux_token(lua_State *L) {
-    lua_pushstring(L, Serial.get_mux_token());
+    lua_pushstring(L, luatt_get_mux_token());
     return 1;
 }
 
 static int lf_set_mux_token(lua_State *L) {
     const char* token = luaL_checkstring(L, 1);
-    Serial.set_mux_token(token);
+    luatt_set_mux_token(token);
+    return 0;
+}
+
+static int lf_info(lua_State *L) {
+    uint32_t hw_hz = sys_clock_hw_cycles_per_sec();
+    luatt_printf("sys_clock_hw_cycles_per_sec() = %u\n", hw_hz);
+
+    int64_t up_ticks = k_uptime_ticks();
+    int64_t up_ms = k_uptime_get();
+    luatt_printf("ticks / ms = %f\n", (double)up_ticks / up_ms);
+
     return 0;
 }
 
@@ -108,14 +128,14 @@ static int lf_print_hex(struct lua_State* L) {
             // pass
         }
         else if ((i & 15) == 0) {
-            Serial.print("\n");
+            luatt_print("\n");
         }
         else if ((i & 3) == 0) {
-            Serial.print(" ");
+            luatt_print(" ");
         }
-        Serial.printf("%02x", data[i]);
+        luatt_printf("%02x", data[i]);
     }
-    Serial.print("\n");
+    luatt_print("\n");
     return 0;
 }
 
@@ -144,6 +164,7 @@ void luatt_setfuncs(lua_State* L) {
         { "set_cb_on_msg",     lf_set_cb_on_msg },
         { "get_mux_token",  lf_get_mux_token },
         { "set_mux_token",  lf_set_mux_token },
+        { "info",           lf_info },
         { 0, 0 }
     };
     luaL_setfuncs(L, luatt_table, 0);

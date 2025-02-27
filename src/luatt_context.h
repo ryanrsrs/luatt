@@ -1,6 +1,8 @@
 #ifndef LUATT_CONTEXT_H
 #define LUATT_CONTEXT_H
 
+#include <stdint.h>
+
 extern "C" {
 #include <lua.h>
 #include <lualib.h>

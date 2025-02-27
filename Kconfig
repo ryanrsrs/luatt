@@ -1,0 +1,4 @@
+config LUATT
+	bool "Support for luatt library"
+	help
+	  This option enables the 'luatt' library

@@ -1,0 +1,11 @@
+zephyr_library()
+zephyr_include_directories(src)
+zephyr_library_sources(
+    src/luatt_context.cpp
+    src/luatt_funcs.cpp
+    src/luatt_funcs_itsybitsy.cpp
+    src/luatt_funcs_kb2040.cpp
+    src/luatt_osal_common.cpp
+    src/luatt_osal_zephyr.cpp
+    src/luatt_loader.cpp
+)

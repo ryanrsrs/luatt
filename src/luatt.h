@@ -6,5 +6,6 @@
 #include "luatt_funcs.h"
 #include "luatt_funcs_itsybitsy.h"
 #include "luatt_funcs_kb2040.h"
+#include "luatt_osal.h"
 
 #endif
